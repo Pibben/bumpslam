@@ -51,7 +51,7 @@ class Environment:
 
 
 def main():
-    img = np.zeros((768, 512, 3), np.int8)
+    img = np.zeros((512, 768, 3), np.int8)
 
     a = Agent(100, 100, 0)
 
