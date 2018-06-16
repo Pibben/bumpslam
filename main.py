@@ -20,9 +20,17 @@ class Agent:
     def get_box(self):
         return self.position, (self.height, self.width), np.degrees(self.heading)
 
+    def get_front_corners(self):
+        points = cv2.boxPoints(self.get_box())
+        return points[2:]
+
     def draw_box(self, canvas):
         box = self.get_box()
         draw_box(box, canvas, (0, 191, 255), 1)
+        points = self.get_front_corners()
+
+        cv2.circle(canvas, tuple(points[0]), 5, (0, 0, 255), -1)
+        cv2.circle(canvas, tuple(points[1]), 5, (0, 0, 255), -1)
 
     def draw_point(self, canvas):
         pass
@@ -52,14 +60,15 @@ class Environment:
         color_img = cv2.cvtColor((255.0 * self.cells).astype(np.uint8), cv2.COLOR_GRAY2RGB)
         canvas[:] = np.maximum(color_img, canvas)
 
-    def get(self, box):
-        points = cv2.boxPoints(box)
+    def get(self, points):
         bb = cv2.boundingRect(points)
         roi = self.cells[bb[1]:bb[1] + bb[3], bb[0]:bb[0] + bb[2]]
         mask = np.full_like(roi, 0)
-        adjusted_box = ((box[0][0] - bb[0], box[0][1] - bb[1]), box[1], box[2])
 
-        draw_box(adjusted_box, mask, 1.0, -1)
+        adjusted_box = points - (bb[0], bb[1])
+
+        adjusted_box = np.int0(adjusted_box)
+        cv2.drawContours(mask, [adjusted_box], 0, 1.0, -1)
 
         return np.sum(np.multiply(roi, mask))
 
@@ -69,18 +78,18 @@ class Estimation:
         self.width = 768
         self.height = 512
 
-        self.cells = np.zeros((self.height, self.width))
+        self.cells = 0.5*np.ones((self.height, self.width))
 
     def draw(self, canvas):
         color_img = cv2.cvtColor((255.0 * self.cells).astype(np.uint8), cv2.COLOR_GRAY2RGB)
         canvas[:] = np.maximum(color_img, canvas)
 
-    def get(self, box):
-        points = cv2.boxPoints(box)
+    def get(self, points):
         bb = cv2.boundingRect(points)
         roi = self.cells[bb[1]:bb[1] + bb[3], bb[0]:bb[0] + bb[2]]
         mask = np.full_like(roi, 0)
-        adjusted_box = ((box[0][0] - bb[0], box[0][1] - bb[1]), box[1], box[2])
+
+        adjusted_box = points - bb[0]
 
         draw_box(adjusted_box, mask, 1.0, -1)
 
@@ -90,33 +99,47 @@ class Estimation:
         pass
 
     def increase(self, box, amount):
-        pass
+        box = np.int0(box)
+        cv2.drawContours(self.cells, [box], 0, amount, -1)
 
     def decrease(self, box, amount):
-        pass
+        box = np.int0(box)
+        cv2.drawContours(self.cells, [box], 0, amount, -1)
 
 
 def main():
     img = np.ones((512, 768, 3), np.uint8)
 
     e = Environment()
+    ee = Estimation()
     a = Agent(100.0, 100.0, np.radians(135))
 
-    for i in range(200):
+    while True:
         img.fill(0)
-        e.draw(img)
+
+        last_corners = a.get_front_corners()
         a.move()
-        a.draw_box(img)
+        new_corners = a.get_front_corners()
 
-        cv2.imshow('Draw01', img)
-        cv2.waitKey(100)
+        contour = np.concatenate((last_corners, new_corners[::-1]))
 
-        if e.get(a.get_box()) > 0:
+        if e.get(contour) > 0:
+            ee.increase(contour, 1.0)
             a.reverse()
             for r in range(int(45.0 / abs(a.speed))):
                 a.move()
             a.rotate(np.random.uniform(np.radians(135), np.radians(135+90)))
             a.reverse()
+        else:
+            ee.decrease(contour, 0.2)
+
+        ee.draw(img)
+
+        #e.draw(img)
+        a.draw_box(img)
+
+        cv2.imshow('Draw01', img)
+        cv2.waitKey(1)
 
 
 if __name__ == "__main__":
