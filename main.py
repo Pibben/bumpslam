@@ -15,7 +15,7 @@ class Agent:
         self.heading = angle
         self.width = 25
         self.height = 40
-        self.speed = 15
+        self.speed = 5
 
     def get_box(self):
         return self.position, (self.height, self.width), np.degrees(self.heading)
@@ -112,31 +112,33 @@ def main():
 
     e = Environment()
     ee = Estimation()
-    a = Agent(100.0, 100.0, np.radians(135))
+
+    a_s = [Agent(np.random.uniform(0, 768), np.random.uniform(0, 512), np.random.uniform(0, 2*np.pi)) for _ in range(200)]
 
     while True:
         img.fill(0)
 
-        last_corners = a.get_front_corners()
-        a.move()
-        new_corners = a.get_front_corners()
+        for a in a_s:
+            last_corners = a.get_front_corners()
+            a.move()
+            new_corners = a.get_front_corners()
 
-        contour = np.concatenate((last_corners, new_corners[::-1]))
+            contour = np.concatenate((last_corners, new_corners[::-1]))
 
-        if e.get(contour) > 0:
-            ee.increase(contour, 1.0)
-            a.reverse()
-            for r in range(int(45.0 / abs(a.speed))):
-                a.move()
-            a.rotate(np.random.uniform(np.radians(135), np.radians(135+90)))
-            a.reverse()
-        else:
-            ee.decrease(contour, 0.2)
+            if e.get(contour) > 0:
+                ee.increase(contour, 1.0)
+                a.reverse()
+                for r in range(int(45.0 / abs(a.speed))):
+                    a.move()
+                a.rotate(np.random.uniform(np.radians(135), np.radians(135+90)))
+                a.reverse()
+            else:
+                ee.decrease(contour, 0.2)
 
+            a.draw_box(img)
         ee.draw(img)
 
         #e.draw(img)
-        a.draw_box(img)
 
         cv2.imshow('Draw01', img)
         cv2.waitKey(1)
