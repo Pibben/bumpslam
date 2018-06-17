@@ -1,6 +1,7 @@
 import math
-import numpy as np
+
 import cv2
+import numpy as np
 
 
 def draw_box(box, canvas, color, thickness):
@@ -19,6 +20,24 @@ def calc_roi_and_mask(points, img):
     cv2.drawContours(mask, [np.int0(adjusted_box)], 0, 1.0, -1)
 
     return roi, mask
+
+
+def sus(agents, number_to_keep):
+    total = sum(a.fitness for a in agents)
+    dist = total / number_to_keep
+    start = np.random.uniform(0.0, dist)
+    pointers = [start + i * dist for i in range(number_to_keep)]
+
+    keep = []
+    for p in pointers:
+        i = 0
+        so_far = agents[0].fitness
+        while so_far < p:
+            i += 1
+            so_far += agents[i].fitness
+        keep.append(agents[i].clone_and_reset())
+
+    return keep
 
 
 class Agent:
