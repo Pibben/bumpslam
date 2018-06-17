@@ -9,6 +9,18 @@ def draw_box(box, canvas, color, thickness):
     cv2.drawContours(canvas, [box3], 0, color, thickness)
 
 
+def calc_roi_and_mask(points, img):
+    bb = cv2.boundingRect(points)
+    roi = img[bb[1]:bb[1] + bb[3], bb[0]:bb[0] + bb[2]]
+    mask = np.full_like(roi, 0)
+
+    adjusted_box = points - (bb[0], bb[1])
+
+    cv2.drawContours(mask, [np.int0(adjusted_box)], 0, 1.0, -1)
+
+    return roi, mask
+
+
 class Agent:
     def __init__(self, x, y, angle):
         self.position = np.array([x, y])
@@ -33,7 +45,7 @@ class Agent:
         cv2.circle(canvas, tuple(points[1]), 5, (0, 0, 255), -1)
 
     def draw_point(self, canvas):
-        pass
+        cv2.circle(canvas, tuple(np.int0(self.position)), 2, (255, 255, 255), -1)
 
     def move(self):
         self.position += self.speed * np.array([math.cos(self.heading), math.sin(self.heading)])
@@ -55,20 +67,14 @@ class Environment:
 
         self.cells = np.zeros((self.height, self.width))
         cv2.rectangle(self.cells, (20, 20), (self.width - 20, self.height - 20), 1.0)
+        cv2.circle(self.cells, (150, 250), 50, 1.0)
 
     def draw(self, canvas):
         color_img = cv2.cvtColor((255.0 * self.cells).astype(np.uint8), cv2.COLOR_GRAY2RGB)
         canvas[:] = np.maximum(color_img, canvas)
 
     def get(self, points):
-        bb = cv2.boundingRect(points)
-        roi = self.cells[bb[1]:bb[1] + bb[3], bb[0]:bb[0] + bb[2]]
-        mask = np.full_like(roi, 0)
-
-        adjusted_box = points - (bb[0], bb[1])
-
-        adjusted_box = np.int0(adjusted_box)
-        cv2.drawContours(mask, [adjusted_box], 0, 1.0, -1)
+        roi, mask = calc_roi_and_mask(points, self.cells)
 
         return np.sum(np.multiply(roi, mask))
 
@@ -85,13 +91,7 @@ class Estimation:
         canvas[:] = np.maximum(color_img, canvas)
 
     def get(self, points):
-        bb = cv2.boundingRect(points)
-        roi = self.cells[bb[1]:bb[1] + bb[3], bb[0]:bb[0] + bb[2]]
-        mask = np.full_like(roi, 0)
-
-        adjusted_box = points - bb[0]
-
-        draw_box(adjusted_box, mask, 1.0, -1)
+        roi, mask = calc_roi_and_mask(points, self.cells)
 
         return np.sum(np.multiply(roi, mask))
 
@@ -99,12 +99,16 @@ class Estimation:
         pass
 
     def increase(self, box, amount):
-        box = np.int0(box)
-        cv2.drawContours(self.cells, [box], 0, amount, -1)
+        roi, mask = calc_roi_and_mask(box, self.cells)
+
+        roi += mask * amount
+        roi[:] = np.clip(roi, 0.0, 1.0)
 
     def decrease(self, box, amount):
-        box = np.int0(box)
-        cv2.drawContours(self.cells, [box], 0, amount, -1)
+        roi, mask = calc_roi_and_mask(box, self.cells)
+
+        roi -= mask * amount
+        roi[:] = np.clip(roi, 0.0, 1.0)
 
 
 def main():
@@ -113,7 +117,7 @@ def main():
     e = Environment()
     ee = Estimation()
 
-    a_s = [Agent(np.random.uniform(0, 768), np.random.uniform(0, 512), np.random.uniform(0, 2*np.pi)) for _ in range(200)]
+    a_s = [Agent(768 / 2, 512 / 2, np.random.uniform(0, 2*np.pi)) for _ in range(1000)]
 
     while True:
         img.fill(0)
@@ -126,16 +130,16 @@ def main():
             contour = np.concatenate((last_corners, new_corners[::-1]))
 
             if e.get(contour) > 0:
-                ee.increase(contour, 1.0)
+                ee.increase(contour, 0.02)
                 a.reverse()
                 for r in range(int(45.0 / abs(a.speed))):
                     a.move()
                 a.rotate(np.random.uniform(np.radians(135), np.radians(135+90)))
                 a.reverse()
             else:
-                ee.decrease(contour, 0.2)
+                ee.decrease(contour, 0.02)
 
-            a.draw_box(img)
+            a.draw_point(img)
         ee.draw(img)
 
         #e.draw(img)
